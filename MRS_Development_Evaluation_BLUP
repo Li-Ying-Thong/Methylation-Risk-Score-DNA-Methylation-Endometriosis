@@ -1,0 +1,86 @@
+############################################################################
+# This script runs the development and evaluation of Methylation Risk Score.
+# Using effect sizes generated from BLUP.
+# This script applies to all pairs of test and training sets, including European ancestry only subset for sensitivity analyses.
+
+# Author: Li Ying Thong
+# Jan 2025
+
+############################################################################
+
+# Software: osca-0.46.1
+# Calculate MRS on test samples
+/file_path/osca-0.46.1\
+ --befile "$myprofile_test_ORMadj"\ # DNAm beta values of test samples
+ --score "$myblp_probe_training_ORMadj.probe.blp"\ # Probe effect sizes predicted from BLUP
+ --out "$myscore_test_ORMadj"
+
+# Software: R/4.2.1
+# Load libraries
+library(broom)
+library(pROC)
+
+# Read samplesheet
+samplesheet <- read.csv("/file_path/Samplesheet_for_analysis.csv", header = TRUE)
+# Read PRS
+PRS <- read.table("/file_path/PRS_Endometrium.sscore")
+# Read MRS score
+MRS_test <- read.table("myscore_test_ORMadj.profile", header = TRUE)
+MRS_test$score_sum <- MRS_test$CNT * MRS_test$SCORE # get sum of scores instead of average
+
+# Split data into training and test set according to institute
+index <- which(samplesheet$Institute.for.Analysis == "CIR")
+training <- samplesheet[-index,] 
+test <- samplesheet[index,] 
+
+# Get Endometriosis case-control status
+phenotype_cov_data <- samplesheet
+unique(phenotype_cov_data$Endometriosis..Yes.No.)
+index <- which(phenotype_cov_data$Endometriosis..Yes.No. == "Yes")
+phenotype_cov_data$Endometriosis..Yes.No.[index] <- "1"
+index <- which(phenotype_cov_data$Endometriosis..Yes.No. == "No")
+phenotype_cov_data$Endometriosis..Yes.No.[index] <- "0"
+phenotype_cov_data$Endometriosis..Yes.No. <- as.factor(phenotype_cov_data$Endometriosis..Yes.No.)
+
+# Format PRS data frame for AUC calculation
+PRS <- PRS[, c(1, 6)]
+phenotype_cov_data <- merge(phenotype_cov_data, PRS, by.x = "Epic_Complete.Bar.code", by.y = "V1",)
+colnames(phenotype_cov_data)[which(colnames(phenotype_cov_data) == "V6")] <- "PRS"
+
+# Evaluate the performance of MRS using AUC
+AUC_test_data <- merge(MRS_test, phenotype_cov_data, by.x = "IID", by.y = "Epic_Complete.Bar.code")
+colnames(AUC_test_data)[6] <- "MRS"
+## logistic regression
+model_test <- glm(Endometriosis..Yes.No.~MRS, family="binomial", data=AUC_test_data)
+summary_model <- summary(model_test)
+summary_model$coefficients[2, 1] # MRS estimate 
+summary_model$coefficients[2, 2] # MRS estimate SE 
+summary_model$coefficients[2, 4] # MRS pvalue 
+## AUC 
+predicted_test <- predict(model_test, AUC_test_data, type="response")
+roc_object_test <- roc(AUC_test_data$Endometriosis..Yes.No., predicted_test)
+AUC_test <- auc(roc_object_test) # AUC
+a <- ci.auc(roc_object_test)
+AUC_summary <- summary(a)
+AUC_summary[6] # upper 95% CI limit of the AUC
+AUC_summary[1] # lower 95% CI limit of the AUC
+
+# Evaluate the combined performance of MRS and PRS using AUC
+## logistic regression
+model_test <- glm(Endometriosis..Yes.No.~MRS+PRS, family="binomial", data=AUC_test_data)
+summary_model <- summary(model_test)
+summary_model$coefficients[2, 1] # MRS estimate 
+summary_model$coefficients[2, 2] # MRS estimate SE 
+summary_model$coefficients[2, 4] # MRS pvalue 
+summary_model$coefficients[3, 1] # PRS estimate
+summary_model$coefficients[3, 2] # PRS estimate SE
+summary_model$coefficients[3, 4] # PRS pvalue
+## AUC 
+predicted_test <- predict(model_test, AUC_test_data, type="response")
+roc_object_test <- roc(AUC_test_data$Endometriosis..Yes.No., predicted_test)
+AUC_test <- auc(roc_object_test) # AUC
+a <- ci.auc(roc_object_test)
+AUC_summary <- summary(a)
+AUC_summary[6] # upper 95% CI limit of the AUC
+AUC_summary[1] # lower 95% CI limit of the AUC
+
