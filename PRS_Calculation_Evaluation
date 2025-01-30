@@ -1,0 +1,64 @@
+############################################################################
+# This script runs the development and evaluation of Polygenic Risk Score.
+# Using weightings generated from McGrath et al.
+# This script applies to all test sets, including European ancestry only subset for sensitivity analyses.
+
+# Author: Li Ying Thong
+# Jan 2025
+
+############################################################################
+
+# Software: Plink2
+# Calculate PRS
+/file_path/plink2\
+ --bfile "/file_path/Sample_Geno_VariantIDUpdated"\ # genotyping information
+ --score "/file_path/Endo2017FinngenR8_sbayesr.snpRes" 2 5 8 header ignore-dup-ids list-variants cols=maybefid,nallele,dosagesum,scoreavgs,scoresums\ # PRS weightings
+ --out "/file_path/PRS_Endometrium"
+
+# Software: R/4.2.1
+# Load libraries
+library(broom)
+library(pROC)
+
+# Read samplesheet
+samplesheet <- read.csv("/file_path/Samplesheet_for_analysis.csv", header = TRUE)
+# Read PRS
+PRS <- read.table("/file_path/PRS_Endometrium.sscore")
+
+# Get Endometriosis case-control status
+phenotype_cov_data <- samplesheet
+unique(phenotype_cov_data$Endometriosis..Yes.No.)
+index <- which(phenotype_cov_data$Endometriosis..Yes.No. == "Yes")
+phenotype_cov_data$Endometriosis..Yes.No.[index] <- "1"
+index <- which(phenotype_cov_data$Endometriosis..Yes.No. == "No")
+phenotype_cov_data$Endometriosis..Yes.No.[index] <- "0"
+phenotype_cov_data$Endometriosis..Yes.No. <- as.factor(phenotype_cov_data$Endometriosis..Yes.No.)
+
+# Split data into training and test set according to institute
+index <- which(samplesheet$Institute.for.Analysis == "IMB")
+training <- samplesheet[-index,]
+test <- samplesheet[index,]
+
+# Format PRS for AUC evaluation
+test_PRS <- PRS[PRS$V1 %in% test$Epic_Complete.Bar.code,] 
+
+# Evaluate the performance of PRS using AUC
+AUC_test_data <- merge(test_PRS, phenotype_cov_data, by.x = "V1", by.y = "Epic_Complete.Bar.code")
+colnames(AUC_test_data)[6] <- "PRS"
+## logistic regression
+model_test <- glm(Endometriosis..Yes.No.~PRS, family="binomial", data=AUC_test_data)
+summary_model <- summary(model_test)
+summary_model$coefficients[2, 1] #PRS estimate 
+summary_model$coefficients[2, 2] #PRS estimate SE 
+summary_model$coefficients[2, 4] #PRS pvalue 
+## AUC 
+predicted_test <- predict(model_test, AUC_test_data, type="response")
+roc_object_test <- roc(AUC_test_data$Endometriosis..Yes.No., predicted_test)
+AUC_test <- auc(roc_object_test) # AUC
+a <- ci.auc(roc_object_test)
+AUC_summary <- summary(a)
+AUC_summary[6] # upper 95% CI limit of the AUC
+AUC_summary[1] # lower 95% CI limit of the AUC
+
+# Repeat step "Split data into training and test set according to institute", "Format PRS for AUC evaluation" and "Evaluate the performance of PRS using AUC" on all test sets
+
