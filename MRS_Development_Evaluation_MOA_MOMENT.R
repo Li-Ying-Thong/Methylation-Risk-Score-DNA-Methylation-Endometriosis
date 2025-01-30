@@ -11,7 +11,6 @@
 # Load libraries
 library(broom)
 library(pROC)
-library(dplyr)
 
 # Read probe effect sizes and p-values generated using MOA or MOMENT from training samples
 MWAS <- read.table("/file_path/MOA_Endometrium_training_CIR.moa", header = TRUE)
