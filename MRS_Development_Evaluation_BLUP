@@ -11,9 +11,9 @@
 # Software: osca-0.46.1
 # Calculate MRS on test samples
 /file_path/osca-0.46.1\
- --befile "$myprofile_test_ORMadj"\ # DNAm beta values of test samples
- --score "$myblp_probe_training_ORMadj.probe.blp"\ # Probe effect sizes predicted from BLUP
- --out "$myscore_test_ORMadj"
+ --befile "/file_path/myprofile_test_ORMadj"\ # DNAm beta values of test samples
+ --score "/file_path/myblp_probe_training_ORMadj.probe.blp"\ # Probe effect sizes predicted from BLUP
+ --out "/file_path/myscore_test_ORMadj"
 
 # Software: R/4.2.1
 # Load libraries
