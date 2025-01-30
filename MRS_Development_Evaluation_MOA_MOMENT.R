@@ -5,7 +5,7 @@
 
 # Author: Li Ying Thong
 # Jan 2025
-# Software: R
+# Software: R/4.2.1
 ############################################################################
 
 # Load libraries
