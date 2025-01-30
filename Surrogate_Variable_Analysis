@@ -1,0 +1,58 @@
+############################################################################
+# This script runs Surrogate Variable Analysis.
+
+# Author: Li Ying Thong
+# Jan 2025
+############################################################################
+
+# Software: R/4.2.1
+# Load libraries
+library(sva) 
+library(isva)
+library(SmartSVA)
+
+# Format DNAm mvalues
+Y <- read.table("/file_path/myprofile_mvalues.txt", header = TRUE, sep = "", dec = ".") # DNAm mvalues with the appropriate subset of samples in .txt
+Y <- as.matrix(Y)
+Y <- t(Y)
+names <- Y[1,]
+colnames(Y) <- names
+Y <- Y[, order(colnames(Y))]
+Y <- Y[3:nrow(Y), ]
+save(Y, file = "Y_for_SVA.Robj")
+
+# Get Endometriosis case-control status
+pheno <- read.table("/file_path/myphen.txt")
+
+# SVA
+Y <- matrix( 
+  as.numeric(Y), ncol = ncol(Y))
+mod <-  model.matrix(~Endometriosis..Yes.No., data=pheno)
+mod0 <-  model.matrix(~1, data=pheno)
+Y.r <- t(resid(lm(t(Y) ~ Endometriosis..Yes.No., data=pheno)))
+n.sv <- EstDimRMT(Y.r, FALSE)$dim + 1
+n.sv 
+sv.obj <- smartsva.cpp(Y, mod, mod0, n.sv=n.sv)
+SV <- data.frame(sv.obj$sv)
+SV$IID <- pheno$IID
+SV <- SV[, c(ncol(SV), 1:(ncol(SV)-1))]
+
+# Format SVs to be readable by OSCA
+SV$FID <- SV$IID
+qcovar <- SV[, c(52, 1, 2:51)] 
+write.table(qcovar, file="qcovar_ORMadj.txt", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+
+# Software: osca-0.46.1
+# Adjust DNAm values using SVs
+/file_path/osca-0.46.1\
+ --befile "/file_path/myprofile_endometrium_mvalues"\ # DNAm mvalues with the appropriate subset of samples 
+ --qcovar "/file_path/qcovar_ORMadj.txt"\ # SVs
+ --adj-probe --make-bod\
+ --out "/file_path/myprofile_ORMadj_mvalues" # adjusted DNAm mvalues
+
+# Convert mvalues to beta values for downstream analyses
+/file_path/osca-0.46.1\
+  --befile "/file_path/myprofile_ORMadj_mvalues"\
+  --m2beta --make-bod\
+  --out "/file_path/myprofile_ORMadj"
